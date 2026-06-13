@@ -1,0 +1,28 @@
+# Environment files
+.env
+*.env
+backend/.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+env/
+db.sqlite3
+
+# Node.js
+node_modules/
+dist/
+.eslintcache
+
+# IDEs
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp

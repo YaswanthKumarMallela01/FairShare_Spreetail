@@ -1,0 +1,154 @@
+"""
+Django settings for fairshare project.
+"""
+
+import os
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load .env file manually if it exists
+env_path = BASE_DIR / ".env"
+if env_path.exists():
+    with open(env_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, val = line.split("=", 1)
+                os.environ[key.strip()] = val.strip().strip("'\"")
+
+SECRET_KEY = os.environ.get(
+    "DJANGO_SECRET_KEY",
+    "django-insecure-dev-key-change-in-production-fairshare-2026",
+)
+
+DEBUG = os.environ.get("DJANGO_DEBUG", "True").lower() in ("true", "1", "yes")
+
+ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "*").split(",")
+
+# ---------------------------------------------------------------------------
+# Application definition
+# ---------------------------------------------------------------------------
+INSTALLED_APPS = [
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+    # Third-party
+    "rest_framework",
+    "rest_framework.authtoken",
+    "corsheaders",
+    # Local
+    "api",
+]
+
+MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+]
+
+ROOT_URLCONF = "fairshare.urls"
+
+TEMPLATES = [
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.debug",
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
+            ],
+        },
+    },
+]
+
+WSGI_APPLICATION = "fairshare.wsgi.application"
+
+# ---------------------------------------------------------------------------
+# Database — SQLite for development
+# ---------------------------------------------------------------------------
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR / "db.sqlite3",
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Password validation
+# ---------------------------------------------------------------------------
+AUTH_PASSWORD_VALIDATORS = [
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+]
+
+# ---------------------------------------------------------------------------
+# Internationalization
+# ---------------------------------------------------------------------------
+LANGUAGE_CODE = "en-us"
+TIME_ZONE = "Asia/Kolkata"
+USE_I18N = True
+USE_TZ = True
+
+# ---------------------------------------------------------------------------
+# Static files
+# ---------------------------------------------------------------------------
+STATIC_URL = "static/"
+
+# ---------------------------------------------------------------------------
+# Default primary key field type
+# ---------------------------------------------------------------------------
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# ---------------------------------------------------------------------------
+# Django REST Framework
+# ---------------------------------------------------------------------------
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.TokenAuthentication",
+        "rest_framework.authentication.SessionAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 50,
+}
+
+# ---------------------------------------------------------------------------
+# CORS — allow React dev server and any Vercel deployment
+# ---------------------------------------------------------------------------
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https://.*\.vercel\.app$",
+]
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+CORS_ALLOW_CREDENTIALS = True
+
+# ---------------------------------------------------------------------------
+# CSV Importer defaults
+# ---------------------------------------------------------------------------
+DEFAULT_CURRENCY = "INR"
+USD_TO_INR_RATE = "83.50"  # stored as string, converted to Decimal in code
+
+# ---------------------------------------------------------------------------
+# Gemini AI Configuration
+# ---------------------------------------------------------------------------
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
