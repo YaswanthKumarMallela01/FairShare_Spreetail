@@ -766,6 +766,7 @@ Answer questions based on these finances. Keep the tone fun, punchy, and friendl
 
         # 2. Build multi-turn Gemini payload (contents array)
         contents = []
+        context_injected = False
 
         if history:
             # Map history from frontend structure [{"sender": "user"|"ai", "text": "..."}] to Gemini role structure
@@ -773,9 +774,10 @@ Answer questions based on these finances. Keep the tone fun, punchy, and friendl
                 role = "user" if msg.get("sender") == "user" else "model"
                 text = msg.get("text", "")
                 
-                # Inject system context into the very first turn of the conversation
-                if i == 0 and role == "user":
-                    text = f"{context_prompt}\n\nUser: {text}"
+                # Inject system context into the first user turn in the history
+                if role == "user" and not context_injected:
+                    text = f"{context_prompt}\n\nUser Question: {text}"
+                    context_injected = True
                 
                 contents.append({
                     "role": role,
@@ -784,16 +786,21 @@ Answer questions based on these finances. Keep the tone fun, punchy, and friendl
             
             # Append current question as the latest user turn
             if question:
+                text = question
+                # If context was never injected, inject it here
+                if not context_injected:
+                    text = f"{context_prompt}\n\nUser Question: {text}"
+                    context_injected = True
                 contents.append({
                     "role": "user",
-                    "parts": [{"text": question}]
+                    "parts": [{"text": text}]
                 })
         else:
             # Standard initial prompt
             initial_query = question if question else "Provide a short, engaging financial analysis of this group."
             contents.append({
                 "role": "user",
-                "parts": [{"text": f"{context_prompt}\n\nUser: {initial_query}"}]
+                "parts": [{"text": f"{context_prompt}\n\nUser Question: {initial_query}"}]
             })
 
         # Use user's API Key
@@ -814,7 +821,31 @@ Answer questions based on these finances. Keep the tone fun, punchy, and friendl
             response = requests.post(url, headers=headers, json=payload, timeout=30)
             if response.status_code == 200:
                 res_data = response.json()
-                ai_text = res_data["candidates"][0]["content"]["parts"][0]["text"]
+                
+                # Defensive parsing to avoid KeyError: 'text' or 'content'
+                candidates = res_data.get("candidates", [])
+                if not candidates:
+                    return Response(
+                        {"detail": f"Gemini API returned 200 but no candidates. Response: {res_data}"},
+                        status=status.HTTP_502_BAD_GATEWAY
+                    )
+                
+                content = candidates[0].get("content", {})
+                parts = content.get("parts", [])
+                if not parts:
+                    return Response(
+                        {"detail": f"Gemini API returned 200 but empty parts. Response: {res_data}"},
+                        status=status.HTTP_502_BAD_GATEWAY
+                    )
+                
+                part = parts[0]
+                if "text" not in part:
+                    return Response(
+                        {"detail": f"Gemini response part missing 'text'. Response: {res_data}"},
+                        status=status.HTTP_502_BAD_GATEWAY
+                    )
+                
+                ai_text = part["text"]
                 return Response({"advice": ai_text})
             else:
                 return Response(

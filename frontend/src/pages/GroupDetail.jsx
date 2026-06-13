@@ -32,6 +32,156 @@ import {
   Legend,
 } from 'recharts';
 
+// Markdown Helpers
+const parseInline = (text) => {
+  if (!text) return "";
+  // Split by bold symbols (**bold**)
+  const boldParts = text.split(/\*\*([^*]+)\*\*/g);
+  return boldParts.flatMap((part, bIdx) => {
+    if (bIdx % 2 === 1) {
+      return [<strong key={`b-${bIdx}`} style={{ color: 'var(--accent-cyan)', fontWeight: 700 }}>{part}</strong>];
+    }
+    // Split by inline code (code)
+    const codeParts = part.split(/`([^`]+)`/g);
+    return codeParts.flatMap((cPart, cIdx) => {
+      if (cIdx % 2 === 1) {
+        return [<code key={`c-${bIdx}-${cIdx}`} style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: 4, fontFamily: 'monospace', fontSize: '0.85em' }}>{cPart}</code>];
+      }
+      // Highlight @mentions (e.g. @Alex)
+      const mentionParts = cPart.split(/(@[a-zA-Z0-9_]+)/g);
+      return mentionParts.map((mPart, mIdx) => {
+        if (mIdx % 2 === 1) {
+          return <span key={`m-${bIdx}-${cIdx}-${mIdx}`} style={{ color: 'var(--accent-cyan)', fontWeight: 600, background: 'rgba(6, 182, 212, 0.15)', padding: '1px 5px', borderRadius: '4px' }}>{mPart}</span>;
+        }
+        return mPart;
+      });
+    });
+  });
+};
+
+const renderMarkdown = (text) => {
+  if (!text) return null;
+  const lines = text.split('\n');
+  const elements = [];
+  let currentList = [];
+
+  const flushList = (key) => {
+    if (currentList.length > 0) {
+      elements.push(
+        <ul key={`list-${key}`} style={{ margin: '8px 0', paddingLeft: '20px', listStyleType: 'disc' }}>
+          {currentList}
+        </ul>
+      );
+      currentList = [];
+    }
+  };
+
+  lines.forEach((line, index) => {
+    const trimmed = line.trim();
+
+    // Horizontal Rule
+    if (trimmed === '***' || trimmed === '---' || trimmed === '___') {
+      flushList(index);
+      elements.push(
+        <hr 
+          key={index} 
+          style={{ 
+            border: 'none', 
+            borderTop: '1px solid var(--glass-border)', 
+            margin: '16px 0',
+            opacity: 0.5 
+          }} 
+        />
+      );
+      return;
+    }
+
+    // Headers
+    if (trimmed.startsWith('### ')) {
+      flushList(index);
+      elements.push(
+        <h4 
+          key={index} 
+          style={{ 
+            margin: '16px 0 8px 0', 
+            fontSize: '1.1rem', 
+            fontWeight: 700, 
+            color: 'white',
+            letterSpacing: '0.5px'
+          }}
+        >
+          {parseInline(trimmed.substring(4))}
+        </h4>
+      );
+      return;
+    }
+    if (trimmed.startsWith('## ')) {
+      flushList(index);
+      elements.push(
+        <h3 
+          key={index} 
+          style={{ 
+            margin: '20px 0 10px 0', 
+            fontSize: '1.25rem', 
+            fontWeight: 700, 
+            color: 'white' 
+          }}
+        >
+          {parseInline(trimmed.substring(3))}
+        </h3>
+      );
+      return;
+    }
+    if (trimmed.startsWith('# ')) {
+      flushList(index);
+      elements.push(
+        <h2 
+          key={index} 
+          style={{ 
+            margin: '24px 0 12px 0', 
+            fontSize: '1.4rem', 
+            fontWeight: 800, 
+            color: 'white' 
+          }}
+        >
+          {parseInline(trimmed.substring(2))}
+        </h2>
+      );
+      return;
+    }
+
+    // List Items
+    if (trimmed.startsWith('* ') || trimmed.startsWith('- ')) {
+      const bulletText = trimmed.substring(2);
+      currentList.push(
+        <li key={`li-${index}`} style={{ margin: '6px 0', color: 'var(--text-primary)' }}>
+          {parseInline(bulletText)}
+        </li>
+      );
+      return;
+    }
+
+    // Empty Line
+    if (trimmed === '') {
+      flushList(index);
+      elements.push(<div key={`empty-${index}`} style={{ height: '8px' }} />);
+      return;
+    }
+
+    // Regular line / Paragraph
+    flushList(index);
+    elements.push(
+      <p key={index} style={{ margin: '8px 0', lineHeight: '1.6' }}>
+        {parseInline(line)}
+      </p>
+    );
+  });
+
+  flushList(lines.length);
+
+  return <div style={{ display: 'flex', flexDirection: 'column' }}>{elements}</div>;
+};
+
 export default function GroupDetail() {
   const { id } = useParams();
   const [activeTab, setActiveTab] = useState('expenses');
@@ -734,11 +884,11 @@ export default function GroupDetail() {
                       fontSize: '0.92rem',
                       lineHeight: '1.5',
                       border: msg.sender === 'ai' ? '1px solid var(--glass-border)' : 'none',
-                      whiteSpace: 'pre-wrap',
+                      whiteSpace: msg.sender === 'user' ? 'pre-wrap' : 'normal',
                       boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
                     }}
                   >
-                    {msg.text}
+                    {msg.sender === 'ai' ? renderMarkdown(msg.text) : msg.text}
                   </div>
                 ))}
 
