@@ -56,7 +56,7 @@ export const groupsAPI = {
   removeMember: (groupId, membershipId) => api.delete(`groups/${groupId}/memberships/${membershipId}/`),
   seed: (id) => api.post(`groups/${id}/seed/`),
   join: (code) => api.post('groups/join/', { invite_code: code }),
-  getAIAssistance: (id) => api.post(`groups/${id}/ai-advise/`),
+  getAIAssistance: (id, data) => api.post(`groups/${id}/ai-advise/`, data),
 };
 
 // ============ EXPENSES ============

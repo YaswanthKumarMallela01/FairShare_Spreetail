@@ -80,7 +80,10 @@ export default function GroupDetail() {
   const [timelineIndex, setTimelineIndex] = useState(0);
 
   // AI Roommate Advisor states
-  const [aiAdvice, setAiAdvice] = useState('');
+  const [chatMessages, setChatMessages] = useState([
+    { sender: 'ai', text: "👋 Hello! I am your Gemini-powered FairShare AI Roommate. Click '📊 Generate Report' to get a quick summary of this group's spending, or type any questions below about your bills, who owes who, or roommate habits!" }
+  ]);
+  const [chatInput, setChatInput] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState('');
 
@@ -139,18 +142,35 @@ export default function GroupDetail() {
     }
   }, [timeline]);
 
-  const fetchAIAdvice = async () => {
+  const handleChatSubmit = async (e, customQuery = null) => {
+    if (e) e.preventDefault();
+    const queryText = customQuery || chatInput;
+    if (!queryText.trim()) return;
+
+    const userMsg = { sender: 'user', text: queryText };
+    const updatedMessages = [...chatMessages, userMsg];
+    setChatMessages(updatedMessages);
+    setChatInput('');
     setAiLoading(true);
     setAiError('');
+
     try {
-      const res = await groupsAPI.getAIAssistance(id);
-      setAiAdvice(res.data.advice);
+      const res = await groupsAPI.getAIAssistance(id, {
+        messages: chatMessages,
+        question: queryText
+      });
+      const aiMsg = { sender: 'ai', text: res.data.advice };
+      setChatMessages(prev => [...prev, aiMsg]);
     } catch (err) {
       console.error(err);
-      setAiError(err.response?.data?.detail || 'Failed to fetch AI roommate advice.');
+      setAiError(err.response?.data?.detail || 'Failed to fetch AI roommate advice. Check network/API keys.');
     } finally {
       setAiLoading(false);
     }
+  };
+
+  const handleGenerateReport = () => {
+    handleChatSubmit(null, "Provide a short, engaging financial analysis of this group. Include a Financial Health Check, spend patterns, and settlement advice.");
   };
 
   const handleExpenseSubmit = async (e) => {
@@ -322,7 +342,7 @@ export default function GroupDetail() {
     
     const nodes = members.map((m, i) => {
       const angle = (2 * Math.PI * i) / members.length;
-      const radius = 120;
+      const radius = 165;
       const cx = 250 + radius * Math.cos(angle);
       const cy = 250 + radius * Math.sin(angle);
       return {
@@ -528,13 +548,13 @@ export default function GroupDetail() {
               {/* Debt Graph Card */}
               <div>
                 <h3 style={{ marginBottom: 16 }}>Debt Network Visualizer</h3>
-                <GlassCard hover={false} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minHeight: 460 }}>
+                <GlassCard hover={false} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minHeight: 560 }}>
                   {nodes.length === 0 ? (
                     <div className="empty-state">No network data</div>
                   ) : (
-                    <svg viewBox="0 0 500 500" style={{ width: '100%', maxWidth: 400, height: 'auto' }}>
+                    <svg viewBox="0 0 500 500" style={{ width: '100%', maxWidth: 500, height: 'auto' }}>
                       <defs>
-                        <marker id="arrow" viewBox="0 0 10 10" refX="22" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                        <marker id="arrow" viewBox="0 0 10 10" refX="28" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
                           <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--accent-cyan)" />
                         </marker>
                       </defs>
@@ -589,7 +609,7 @@ export default function GroupDetail() {
                           <circle
                             cx={n.x}
                             cy={n.y}
-                            r="22"
+                            r="28"
                             fill="url(#nodeGradient)"
                             stroke="var(--accent-violet)"
                             strokeWidth="2"
@@ -597,22 +617,22 @@ export default function GroupDetail() {
                           />
                           <text
                             x={n.x}
-                            y={n.y + 4}
+                            y={n.y + 5}
                             textAnchor="middle"
                             fill="white"
                             fontWeight="800"
-                            fontSize="11"
+                            fontSize="13"
                             style={{ userSelect: 'none' }}
                           >
                             {n.name.substring(0, 2).toUpperCase()}
                           </text>
                           <text
                             x={n.x}
-                            y={n.y + 36}
+                            y={n.y + 42}
                             textAnchor="middle"
                             fill="var(--text-secondary)"
                             fontWeight="600"
-                            fontSize="10"
+                            fontSize="11"
                             style={{ userSelect: 'none' }}
                           >
                             {n.name}
@@ -663,26 +683,84 @@ export default function GroupDetail() {
 
         {activeTab === 'analytics' && (
           <motion.div key="analytics" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            {/* AI Roommate Advisory Card */}
+            {/* AI Roommate Advisory Card - Chat Interface with Memory */}
             <GlassCard hover={false} style={{ marginBottom: 24, padding: 28 }} glow={true} glowColor="var(--accent-violet)">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16, justifyContent: 'space-between', marginBottom: 20 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                   <span style={{ fontSize: '2.5rem' }}>🤖</span>
                   <div>
-                    <h3 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Gemini AI Financial Roommate</h3>
+                    <h3 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Gemini AI Roommate Advisor</h3>
                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: 4 }}>
-                      Let Gemini analyze your group spending patterns and give you some friendly roommate advice.
+                      Ask questions, query bill details, and get witty financial advice with full conversation memory.
                     </p>
                   </div>
                 </div>
                 <button 
-                  className="btn btn-primary" 
-                  onClick={fetchAIAdvice}
+                  className="btn btn-ghost btn-sm" 
+                  onClick={handleGenerateReport}
                   disabled={aiLoading}
-                  style={{ background: 'var(--gradient-primary)', boxShadow: '0 4px 15px rgba(124,58,237,0.3)' }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700 }}
                 >
-                  {aiLoading ? '🤖 Listening...' : '💬 Ask AI Roommate'}
+                  📊 Generate Report
                 </button>
+              </div>
+
+              {/* Chat Conversation Box */}
+              <div style={{
+                maxHeight: '380px',
+                overflowY: 'auto',
+                padding: '16px',
+                background: 'rgba(10, 10, 26, 0.4)',
+                border: '1px solid var(--glass-border)',
+                borderRadius: 'var(--radius-md)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
+                marginBottom: '16px',
+                boxShadow: 'inset 0 2px 10px rgba(0,0,0,0.3)'
+              }}>
+                {chatMessages.map((msg, index) => (
+                  <div 
+                    key={index}
+                    style={{
+                      alignSelf: msg.sender === 'user' ? 'flex-end' : 'flex-start',
+                      background: msg.sender === 'user' ? 'var(--gradient-primary)' : 'rgba(255, 255, 255, 0.05)',
+                      color: 'var(--text-primary)',
+                      padding: '12px 16px',
+                      borderRadius: '12px',
+                      borderTopRightRadius: msg.sender === 'user' ? '0px' : '12px',
+                      borderTopLeftRadius: msg.sender === 'ai' ? '0px' : '12px',
+                      maxWidth: '80%',
+                      fontSize: '0.92rem',
+                      lineHeight: '1.5',
+                      border: msg.sender === 'ai' ? '1px solid var(--glass-border)' : 'none',
+                      whiteSpace: 'pre-wrap',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                    }}
+                  >
+                    {msg.text}
+                  </div>
+                ))}
+
+                {aiLoading && (
+                  <div style={{
+                    alignSelf: 'flex-start',
+                    background: 'rgba(255, 255, 255, 0.03)',
+                    color: 'var(--text-muted)',
+                    padding: '12px 16px',
+                    borderRadius: '12px',
+                    borderTopLeftRadius: '0px',
+                    border: '1px solid var(--glass-border)',
+                    fontSize: '0.9rem',
+                    fontStyle: 'italic',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    <LoadingSpinner size={16} />
+                    <span>Roommate is typing...</span>
+                  </div>
+                )}
               </div>
 
               {aiError && (
@@ -692,40 +770,33 @@ export default function GroupDetail() {
                   color: '#f87171',
                   padding: 12,
                   borderRadius: 'var(--radius-sm)',
-                  marginTop: 16,
+                  marginBottom: 16,
                   fontSize: '0.85rem'
                 }}>
                   ⚠️ {aiError}
                 </div>
               )}
 
-              {aiLoading && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 20, color: 'var(--text-secondary)' }}>
-                  <LoadingSpinner size={24} />
-                  <span style={{ fontSize: '0.9rem', fontStyle: 'italic' }}>AI roommate is reading the bill receipts...</span>
-                </div>
-              )}
-
-              {aiAdvice && !aiLoading && (
-                <motion.div 
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  style={{
-                    marginTop: 20,
-                    padding: 20,
-                    background: 'rgba(255,255,255,0.03)',
-                    border: '1px solid var(--glass-border)',
-                    borderRadius: 'var(--radius-md)',
-                    fontSize: '0.95rem',
-                    lineHeight: 1.6,
-                    color: 'var(--text-primary)',
-                    whiteSpace: 'pre-wrap',
-                    boxShadow: 'inset 0 2px 10px rgba(0,0,0,0.2)'
-                  }}
+              {/* Chat Input Bar */}
+              <form onSubmit={handleChatSubmit} style={{ display: 'flex', gap: '12px' }}>
+                <input
+                  type="text"
+                  className="input-field"
+                  placeholder="Ask a question (e.g. Why does Rohan owe Aisha? or Who spent on groceries?)"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  disabled={aiLoading}
+                  style={{ flex: 1, height: '46px' }}
+                />
+                <button 
+                  type="submit" 
+                  className="btn btn-primary"
+                  disabled={aiLoading || !chatInput.trim()}
+                  style={{ width: '100px', height: '46px' }}
                 >
-                  {aiAdvice}
-                </motion.div>
-              )}
+                  Send
+                </button>
+              </form>
             </GlassCard>
 
             <div className="grid grid-2" style={{ gap: 24 }}>

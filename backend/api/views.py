@@ -719,13 +719,17 @@ class DemoLoginView(APIView):
 
 
 class AIAssistantView(APIView):
-    """Calls Gemini API to analyze group spending and provide witty financial advice."""
+    """Calls Gemini API to analyze group spending and answer user questions with chat memory."""
 
     def post(self, request: Request, group_pk: int) -> Response:
         try:
             group = Group.objects.get(pk=group_pk)
         except Group.DoesNotExist:
             return Response({"detail": "Group not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # 1. Extract chat history and latest question from POST payload
+        history = request.data.get("messages", [])
+        question = request.data.get("question", "")
 
         # Fetch balances and expenses
         from .balance import compute_balances
@@ -745,8 +749,8 @@ class AIAssistantView(APIView):
             expenses_list.append(f"- {e.paid_by.username} paid INR {e.amount} for '{e.description}' on {e.date} (Split: {e.split_type})")
         expenses_str = "\n".join(expenses_list) if expenses_list else "No recent expenses logged."
 
-        # System prompt & user prompt
-        prompt = f"""
+        # Base prompt setting the system role and financial context
+        context_prompt = f"""
 You are the "FairShare AI roommate", a smart, friendly, and slightly humorous financial assistant for a shared household.
 Here are the current finances for the group "{group.name}":
 Members: {members_str}
@@ -757,13 +761,40 @@ Recent Expenses:
 Outstanding Debts (Simplified):
 {debts_str}
 
-Provide a short, engaging financial analysis of this group. Include:
-1. A quick "Financial Health Check" (who spent the most, who is cruising, who is the free-rider).
-2. Humorously call out any major spending patterns.
-3. Witty, actionable advice on how they should settle their debts.
-
-Keep the tone fun, punchy, and friendly. Output in clean Markdown, with emojis. Keep it under 200 words.
+Answer questions based on these finances. Keep the tone fun, punchy, and friendly. Output in clean Markdown, with emojis. Keep responses concise and under 150 words.
 """
+
+        # 2. Build multi-turn Gemini payload (contents array)
+        contents = []
+
+        if history:
+            # Map history from frontend structure [{"sender": "user"|"ai", "text": "..."}] to Gemini role structure
+            for i, msg in enumerate(history):
+                role = "user" if msg.get("sender") == "user" else "model"
+                text = msg.get("text", "")
+                
+                # Inject system context into the very first turn of the conversation
+                if i == 0 and role == "user":
+                    text = f"{context_prompt}\n\nUser: {text}"
+                
+                contents.append({
+                    "role": role,
+                    "parts": [{"text": text}]
+                })
+            
+            # Append current question as the latest user turn
+            if question:
+                contents.append({
+                    "role": "user",
+                    "parts": [{"text": question}]
+                })
+        else:
+            # Standard initial prompt
+            initial_query = question if question else "Provide a short, engaging financial analysis of this group."
+            contents.append({
+                "role": "user",
+                "parts": [{"text": f"{context_prompt}\n\nUser: {initial_query}"}]
+            })
 
         # Use user's API Key
         from django.conf import settings
@@ -776,9 +807,7 @@ Keep the tone fun, punchy, and friendly. Output in clean Markdown, with emojis. 
             "x-goog-api-key": api_key
         }
         payload = {
-            "contents": [{
-                "parts": [{"text": prompt}]
-            }]
+            "contents": contents
         }
 
         try:
