@@ -85,6 +85,14 @@ DATABASES = {
     }
 }
 
+# Configure PostgreSQL if DATABASE_URL environment variable is present (e.g. Supabase production database)
+import dj_database_url
+if os.environ.get("DATABASE_URL"):
+    DATABASES["default"] = dj_database_url.config(
+        conn_max_age=600,
+        ssl_require=True
+    )
+
 # ---------------------------------------------------------------------------
 # Password validation
 # ---------------------------------------------------------------------------
