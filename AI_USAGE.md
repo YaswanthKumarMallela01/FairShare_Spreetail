@@ -36,6 +36,21 @@
 
 **Result:** Generated a comprehensive set of CSS variables and component styles. Applied consistently across all pages.
 
+### Prompt 6: O(N) Timeline playback performance optimization
+> "Optimize the compute_timeline function to avoid N+1 query loop for dates in the group. Load active memberships, expenses with prefetch_related splits, and settlements exactly once, and compute the running balance chronologically in memory."
+
+**Result:** Generated an O(N) single-pass balance accumulation. Replaced the old database hit loop, reducing loading time from 9 seconds to under 50ms.
+
+### Prompt 7: Vercel Generic SMTP Email Relay
+> "Create a generic serverless SMTP sender function on Vercel send_email.py that receives email, subject, plain_message, and html_message, and securely delivers it using my Gmail app password. Protect it with a shared secret key header check."
+
+**Result:** Generated a Python serverless function that connects to Gmail SMTP on port 465 over SSL, enabling any future notification features to be relayed securely.
+
+### Prompt 8: Admin-Moderated Leave Request Flow
+> "Implement a leave request flow where group members click 'Leave Group' to request departure, which sets a pending flag in the membership table. Create API endpoints for the admin to approve or reject the leave requests, which will deactivate their membership and set their left_at date."
+
+**Result:** Scaffolding was generated. Handled database model migrations and frontend state updates to enable clean admin-moderated departures.
+
 ---
 
 ## ❌ Three Concrete Cases Where AI Produced Something Wrong

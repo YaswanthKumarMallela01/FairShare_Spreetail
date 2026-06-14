@@ -109,6 +109,7 @@ erDiagram
         date joined_at
         date left_at "nullable"
         bool is_active
+        bool pending_leave_request "default=false"
     }
 
     Expense {
@@ -197,3 +198,5 @@ erDiagram
 5. **`ExpenseSplit`** — Pre-calculated amount each user owes for each expense. This makes balance queries fast (just SUM the splits) rather than recalculating split logic every time.
 
 6. **`OTPVerification`** — Simple decoupled table for forgot-password OTP lifecycle tracking. Stores the target email, the generated 6-digit OTP code, verification status (`is_verified`), and the creation timestamp. Storing these verification records separately allows password reset requests to be stateless for the user's main profile until verification completes, and ensures clean token lifecycles with built-in expiration validation.
+
+7. **`GroupMembership.pending_leave_request`** — Boolean flag enabling moderated group departures. Instead of letting users leave instantly (which would break balance calculations if they still owe money), users submit a request, which is approved by the group admin to officially set `is_active=False` and stamp `left_at` as of that date.

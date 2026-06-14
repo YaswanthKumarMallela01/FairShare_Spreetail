@@ -182,3 +182,27 @@ Meera's farewell dinner is on 28-03-2026 (row 33). Her `left_at` date is set to 
 
 **Rationale:** The official `google-generativeai` python library is subject to breaking API changes, version mismatches, and bulky dependency weights. Using direct python `requests` to call the generative language endpoint (`https://generativelanguage.googleapis.com/...`) is lightweight, standard, requires no complex SDK setups, and runs with zero friction.
 
+---
+
+## 14. Email Delivery: Generic Vercel Serverless SMTP Relay
+
+### Decision: Generic HTTP POST SMTP Relay on Vercel
+
+**Rationale:** Render completely blocks outbound traffic on SMTP ports 25, 465, and 587. To bypass this, we implemented a serverless function on Vercel. Instead of making it single-purpose (which would require creating new functions for every new notification type), we built a generic `send_email.py` serverless endpoint. The Django backend sends the recipient, subject, plain text body, and HTML body via secure HTTPS POST with a shared secret key, allowing any future email features to be added instantly.
+
+---
+
+## 15. Group Leaving: Admin-Moderated Departure Flow
+
+### Decision: Members submit requests; Admin approves or rejects
+
+**Rationale:** Allowing members to leave instantly is mathematically problematic if they still owe money, as their debts would become orphaned or unbalanced in the simplified settlement graph. To enforce accountability while giving users a way to leave, we implemented a moderated flow: members click "Leave Group" to request departure (setting `pending_leave_request=True`). The group creator (admin) reviews the request on their dashboard and approves it once all debts are settled, ensuring database integrity.
+
+---
+
+## 16. Timeline playback: O(N) In-memory Aggregation
+
+### Decision: Single-pass in-memory chronological accumulation
+
+**Rationale:** Generating cumulative balance snapshots over time previously caused an N+1 query loop: the backend queried the database for every unique date in the group's history. For a group with 43 expenses, this ran ~90 database calls sequentially, taking 5-10 seconds. We optimized this to fetch active memberships, expenses, and settlements *exactly once* (3 queries total) and progressively accumulate the balances chronologically in memory. This cut API load times from 9 seconds to under 50ms.
+
