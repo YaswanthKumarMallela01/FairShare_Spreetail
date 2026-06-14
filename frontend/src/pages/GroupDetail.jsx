@@ -1098,7 +1098,7 @@ export default function GroupDetail() {
                         </p>
                       </div>
                       <a 
-                        href={`http://localhost:8000/api/import-reports/${selectedReport.id}/excel/`}
+                        href={`${(import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:8000/api/').replace(/\/$/, '')}/import-reports/${selectedReport.id}/excel/`}
                         download
                         className="btn btn-success btn-sm"
                         style={{ height: '36px' }}
