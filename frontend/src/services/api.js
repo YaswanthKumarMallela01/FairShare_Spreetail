@@ -43,6 +43,9 @@ export const authAPI = {
   logout: () => api.post('auth/logout/'),
   getProfile: () => api.get('auth/profile/'),
   demoLogin: () => api.post('auth/demo/'),
+  forgotPassword: (data) => api.post('auth/forgot-password/', data),
+  verifyOTP: (data) => api.post('auth/verify-otp/', data),
+  resetPassword: (data) => api.post('auth/reset-password/', data),
 };
 
 // ============ GROUPS ============

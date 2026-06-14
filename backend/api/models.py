@@ -209,3 +209,23 @@ class ImportAnomaly(models.Model):
 
     def __str__(self) -> str:
         return f"Row {self.row_number}: [{self.severity}] {self.anomaly_type}"
+
+
+class OTPVerification(models.Model):
+    """Stores OTP codes for forgot password verification."""
+
+    email = models.EmailField()
+    otp = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_verified = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def is_expired(self) -> bool:
+        from django.utils import timezone
+        from datetime import timedelta
+        return timezone.now() > self.created_at + timedelta(minutes=10)
+
+    def __str__(self) -> str:
+        return f"OTP for {self.email} — {self.otp} (Verified: {self.is_verified})"

@@ -177,3 +177,14 @@ USD_TO_INR_RATE = "83.50"  # stored as string, converted to Decimal in code
 # Gemini AI Configuration
 # ---------------------------------------------------------------------------
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+
+# ---------------------------------------------------------------------------
+# SMTP Email Configuration (Gmail)
+# ---------------------------------------------------------------------------
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = "smtp.gmail.com"
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "yashvivobook@gmail.com")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "bqku wjvi lehk qqmp")
+DEFAULT_FROM_EMAIL = f"FairShare <{EMAIL_HOST_USER}>"

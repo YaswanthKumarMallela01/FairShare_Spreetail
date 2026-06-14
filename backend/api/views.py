@@ -34,6 +34,7 @@ from .models import (
     ImportAnomaly,
     ImportReport,
     Settlement,
+    OTPVerification,
 )
 from .serializers import (
     ExpenseSerializer,
@@ -109,6 +110,188 @@ class UserProfileView(APIView):
 
     def get(self, request: Request) -> Response:
         return Response(UserSerializer(request.user).data)
+
+
+import random
+from django.core.mail import send_mail
+from django.conf import settings
+
+class ForgotPasswordView(APIView):
+    """Generates and sends a 6-digit OTP code to the user's email."""
+
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request: Request) -> Response:
+        email = request.data.get("email", "").strip()
+        if not email:
+            return Response(
+                {"detail": "Email address is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Look up user(s) matching this email
+        users = User.objects.filter(email__iexact=email)
+        if not users.exists():
+            return Response(
+                {"detail": "No account found with this email address."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Generate a random 6-digit OTP
+        otp = f"{random.randint(100000, 999999)}"
+
+        # Save to database (delete existing OTP requests for this email first)
+        OTPVerification.objects.filter(email__iexact=email).delete()
+        OTPVerification.objects.create(email=email.lower(), otp=otp)
+
+        # Send the email
+        subject = "Reset Your FairShare Password"
+        html_message = f"""
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 32px 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);">
+            <div style="text-align: center; border-bottom: 1px solid #f1f5f9; padding-bottom: 24px; margin-bottom: 28px;">
+                <h1 style="color: #0f172a; margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.5px;">FairShare</h1>
+                <p style="color: #64748b; font-size: 14px; margin: 6px 0 0 0; font-weight: 500;">Shared expense tracking made simple</p>
+            </div>
+            
+            <p style="color: #334155; font-size: 16px; margin: 0 0 16px 0; font-weight: 500;">Hello,</p>
+            <p style="color: #475569; font-size: 15px; line-height: 1.6; margin: 0 0 24px 0;">We received a request to reset the password for your FairShare account. Please use the following One-Time Password (OTP) to complete the verification process:</p>
+            
+            <div style="text-align: center; margin: 32px 0; padding: 20px; background-color: #f8fafc; border-radius: 8px; border: 1px dashed #cbd5e1;">
+                <span style="font-size: 36px; font-weight: 800; letter-spacing: 6px; color: #2563eb; font-family: 'Courier New', Courier, monospace;">{otp}</span>
+            </div>
+            
+            <p style="color: #dc2626; font-size: 13px; font-weight: 600; margin: 0 0 24px 0;">⚠️ This OTP code is valid for 10 minutes. Do not share this email or code with anyone.</p>
+            
+            <p style="color: #64748b; font-size: 13px; line-height: 1.5; margin: 28px 0 0 0; padding-top: 20px; border-top: 1px solid #f1f5f9;">
+                If you did not request a password reset, you can safely ignore this email. Your password will remain unchanged.
+            </p>
+            
+            <p style="color: #94a3b8; font-size: 11px; text-align: center; margin-top: 36px; margin-bottom: 0;">
+                &copy; 2026 FairShare. All rights reserved.
+            </p>
+        </div>
+        """
+        plain_message = (
+            f"Hello,\n\n"
+            f"We received a request to reset your FairShare password. "
+            f"Your One-Time Password (OTP) code is:\n\n"
+            f"{otp}\n\n"
+            f"This code is valid for 10 minutes. Do not share this code with anyone.\n\n"
+            f"If you did not request a password reset, you can safely ignore this email.\n\n"
+            f"Best regards,\n"
+            f"FairShare Team"
+        )
+
+        try:
+            send_mail(
+                subject=subject,
+                message=plain_message,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[email],
+                html_message=html_message,
+                fail_silently=False,
+            )
+            return Response(
+                {"detail": "OTP sent successfully. Please check your inbox."},
+                status=status.HTTP_200_OK,
+            )
+        except Exception as e:
+            return Response(
+                {"detail": f"Failed to send email. Error: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class VerifyOTPView(APIView):
+    """Verifies the OTP code sent to the user's email."""
+
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request: Request) -> Response:
+        email = request.data.get("email", "").strip()
+        otp = request.data.get("otp", "").strip()
+
+        if not email or not otp:
+            return Response(
+                {"detail": "Email and OTP are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        verification = OTPVerification.objects.filter(email__iexact=email).first()
+        if not verification:
+            return Response(
+                {"detail": "No OTP code request found for this email."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if verification.is_expired():
+            return Response(
+                {"detail": "This OTP code has expired. Please request a new one."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if verification.otp != otp:
+            return Response(
+                {"detail": "Invalid OTP code. Please check and try again."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        verification.is_verified = True
+        verification.save()
+
+        return Response(
+            {"detail": "OTP verified successfully. You can now reset your password."},
+            status=status.HTTP_200_OK,
+        )
+
+
+class ResetPasswordView(APIView):
+    """Resets the password after verifying the OTP."""
+
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request: Request) -> Response:
+        email = request.data.get("email", "").strip()
+        otp = request.data.get("otp", "").strip()
+        new_password = request.data.get("new_password", "").strip()
+
+        if not email or not otp or not new_password:
+            return Response(
+                {"detail": "Email, OTP, and new password are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        verification = OTPVerification.objects.filter(email__iexact=email).first()
+        if not verification or not verification.is_verified or verification.otp != otp:
+            return Response(
+                {"detail": "OTP verification is incomplete or invalid."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if verification.is_expired():
+            return Response(
+                {"detail": "OTP code has expired. Please request a new one."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        users = User.objects.filter(email__iexact=email)
+        if not users.exists():
+            return Response(
+                {"detail": "No account found with this email."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        for u in users:
+            u.set_password(new_password)
+            u.save()
+
+        # Delete the verification record after successful reset
+        verification.delete()
+
+        return Response(
+            {"detail": "Your password has been successfully reset. You can now log in."},
+            status=status.HTTP_200_OK,
+        )
 
 
 # =====================================================================
@@ -530,7 +713,15 @@ class DemoLoginView(APIView):
             user.save()
 
         # 2. Reset database state for this user by deleting existing groups they created
-        Group.objects.filter(created_by=user).delete()
+        groups = Group.objects.filter(created_by=user)
+        # Bulk delete children first to bypass slow Django in-memory cascades:
+        ExpenseSplit.objects.filter(expense__group__in=groups).delete()
+        Expense.objects.filter(group__in=groups).delete()
+        Settlement.objects.filter(group__in=groups).delete()
+        ImportAnomaly.objects.filter(import_report__group__in=groups).delete()
+        ImportReport.objects.filter(group__in=groups).delete()
+        GroupMembership.objects.filter(group__in=groups).delete()
+        groups.delete()
 
         # 3. Create or get flatmates
         flatmates = ["Aisha", "Rohan", "Priya", "Meera", "Dev", "Sam"]

@@ -20,6 +20,9 @@ urlpatterns = [
     path("auth/logout/", views.LogoutView.as_view(), name="logout"),
     path("auth/profile/", views.UserProfileView.as_view(), name="profile"),
     path("auth/demo/", views.DemoLoginView.as_view(), name="demo-login"),
+    path("auth/forgot-password/", views.ForgotPasswordView.as_view(), name="forgot-password"),
+    path("auth/verify-otp/", views.VerifyOTPView.as_view(), name="verify-otp"),
+    path("auth/reset-password/", views.ResetPasswordView.as_view(), name="reset-password"),
 
     # Memberships (nested under groups)
     path(
