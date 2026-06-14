@@ -123,6 +123,9 @@ class ForgotPasswordView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def post(self, request: Request) -> Response:
+        import socket
+        old_timeout = socket.getdefaulttimeout()
+        socket.setdefaulttimeout(5.0)
         try:
             email = request.data.get("email", "").strip()
             if not email:
@@ -206,6 +209,8 @@ class ForgotPasswordView(APIView):
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+        finally:
+            socket.setdefaulttimeout(old_timeout)
 
 
 class VerifyOTPView(APIView):
