@@ -30,9 +30,8 @@ class handler(BaseHTTPRequestHandler):
                 self.wfile.write(json.dumps({"detail": "Email and OTP are required."}).encode('utf-8'))
                 return
 
-            # SMTP Settings (Gmail)
-            smtp_user = "yashvivobook@gmail.com"
-            smtp_pass = "bqku wjvi lehk qqmp"
+            smtp_user = "aicertificatemanagement@gmail.com"
+            smtp_pass = "smcw pjdy qcqw hrjj"
             
             subject = "Reset Your FairShare Password"
             

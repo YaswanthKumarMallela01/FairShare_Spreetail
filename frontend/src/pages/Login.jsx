@@ -397,7 +397,7 @@ export default function Login() {
                   id="email"
                   type="email"
                   className="input-field"
-                  placeholder="e.g. yashvivobook@gmail.com"
+                  placeholder="e.g. aicertificatemanagement@gmail.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={loading}
