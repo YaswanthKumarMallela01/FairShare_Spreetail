@@ -33,6 +33,7 @@ This guide provides instructions to deploy your stack using **Supabase** (Databa
    * The connection string will look like this:
      `postgresql://postgres:[YOUR-PASSWORD]@db.xxxxxx.supabase.co:5432/postgres`
 3. **Set Password**: Replace `[YOUR-PASSWORD]` in the copied string with the database password you set when creating the project. Save this connection string; you will need it for Phase B.
+   * *Note on Special Characters*: If your database password contains special characters (like `@`, `:`, `/`, `#`, `?`, etc.), you **MUST** URL-encode them. For example, `@` becomes `%40`, `:` becomes `%3A`, `/` becomes `%2F`. If you don't URL-encode them, the connection URL parser will fail, resulting in a `500 Internal Server Error`.
 
 > [!IMPORTANT]
 > **No SQL Queries Needed!**
@@ -49,11 +50,11 @@ This guide provides instructions to deploy your stack using **Supabase** (Databa
    - **Environment**: `Python 3`
    - **Build Command**:
      ```bash
-     pip install -r requirements.txt && python manage.py migrate
+     pip install -r requirements.txt
      ```
    - **Start Command**:
      ```bash
-     gunicorn fairshare.wsgi:application --bind 0.0.0.0:10000
+     python manage.py migrate && gunicorn fairshare.wsgi:application --bind 0.0.0.0:10000
      ```
 4. Click **Advanced** and add the following **Environment Variables**:
    - `DATABASE_URL`: *Your Supabase URI* (Render's python environment automatically detects this and swaps out SQLite for PostgreSQL using `dj_database_url` in settings)
