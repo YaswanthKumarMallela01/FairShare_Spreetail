@@ -146,18 +146,11 @@ class ForgotPasswordView(APIView):
             OTPVerification.objects.filter(email__iexact=email).delete()
             OTPVerification.objects.create(email=email.lower(), otp=otp)
 
-            # Check if we should use Vercel Serverless SMTP relay
-            origin = request.headers.get("Origin") or request.META.get("HTTP_ORIGIN")
-            if not origin:
-                referer = request.headers.get("Referer") or request.META.get("HTTP_REFERER")
-                if referer:
-                    from urllib.parse import urlparse
-                    parsed = urlparse(referer)
-                    origin = f"{parsed.scheme}://{parsed.netloc}"
+            # Check if backend itself is running locally
+            host = request.get_host()
+            is_backend_local = "localhost" in host or "127.0.0.1" in host
             
-            is_local = not origin or "localhost" in origin or "127.0.0.1" in origin
-            
-            if is_local:
+            if is_backend_local:
                 # Use standard Django send_mail locally
                 subject = "Reset Your FairShare Password"
                 html_message = f"""
@@ -204,8 +197,8 @@ class ForgotPasswordView(APIView):
                     fail_silently=False,
                 )
             else:
-                # Call Vercel Serverless email relay
-                relay_url = f"{origin.rstrip('/')}/api/send_otp"
+                # Call Vercel Serverless email relay (always target the production Vercel URL in production)
+                relay_url = "https://fair-share-spreetail.vercel.app/api/send_otp"
                 headers = {
                     "Content-Type": "application/json",
                     "X-Fairshare-Secret": "fairshare-secure-otp-transfer-key-2026"
