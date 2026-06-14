@@ -9,6 +9,7 @@ import requests
 import pandas as pd
 from datetime import date, datetime
 from django.http import HttpResponse
+from django.db import transaction
 
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
@@ -704,9 +705,11 @@ class DemoLoginView(APIView):
 
     permission_classes = [permissions.AllowAny]
 
+    @transaction.atomic
     def post(self, request: Request) -> Response:
         try:
             from django.conf import settings
+            
             # 1. Create/Get the recruiter demo user
             username = "RecruiterDemo"
             email = "recruiter@fairshare.com"
@@ -717,6 +720,20 @@ class DemoLoginView(APIView):
             if created:
                 user.set_password("recruiter1234")
                 user.save()
+
+            # If user already exists and has 6 groups pre-seeded, skip re-seeding completely
+            # to make logins instant (in under 150ms). Force re-seed only if 'reset' param is true.
+            force_reset = request.data.get("reset", False) or request.query_params.get("reset", "false").lower() in ("true", "1", "yes")
+            if not created and not force_reset:
+                existing_groups = Group.objects.filter(created_by=user)
+                if existing_groups.count() == 6:
+                    token, _ = Token.objects.get_or_create(user=user)
+                    first_group = existing_groups.order_by("created_at").first()
+                    return Response({
+                        "user": UserSerializer(user).data,
+                        "token": token.key,
+                        "group_id": first_group.id if first_group else None
+                    })
 
             # 2. Reset database state for this user by deleting existing groups they created
             groups = Group.objects.filter(created_by=user)
