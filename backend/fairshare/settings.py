@@ -87,7 +87,24 @@ DATABASES = {
 
 # Configure PostgreSQL if DATABASE_URL environment variable is present (e.g. Supabase production database)
 import dj_database_url
-if os.environ.get("DATABASE_URL"):
+from urllib.parse import quote, unquote
+
+database_url = os.environ.get("DATABASE_URL")
+if database_url:
+    # URL-encode the password if it contains special characters to prevent parsing and connection errors.
+    # E.g., @Fairshare15960 contains @, which must be encoded as %40.
+    if "@" in database_url:
+        parts = database_url.rsplit("@", 1)
+        before_at = parts[0]
+        after_at = parts[1]
+        if "://" in before_at:
+            scheme, userinfo = before_at.split("://", 1)
+            if ":" in userinfo:
+                username, password = userinfo.split(":", 1)
+                encoded_password = quote(unquote(password))
+                database_url = f"{scheme}://{username}:{encoded_password}@{after_at}"
+                os.environ["DATABASE_URL"] = database_url
+
     DATABASES["default"] = dj_database_url.config(
         conn_max_age=0,
         ssl_require=True
