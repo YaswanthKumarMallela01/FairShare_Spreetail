@@ -101,6 +101,9 @@ The frontend will be available at `http://localhost:5173/`
 | POST | `/api/auth/logout/` | Logout (invalidate token) |
 | GET | `/api/auth/profile/` | Get current user profile |
 | POST | `/api/auth/demo/` | One-click Recruiter Demo Mode Login & Seeding |
+| POST | `/api/auth/forgot-password/` | Send 6-digit OTP code to email |
+| POST | `/api/auth/verify-otp/` | Verify 6-digit OTP code |
+| POST | `/api/auth/reset-password/` | Reset password using verified OTP |
 
 ### Groups
 | Method | Endpoint | Description |

@@ -169,6 +169,14 @@ erDiagram
         bool reviewed "default=false"
         text resolved_action
     }
+
+    OTPVerification {
+        int id PK
+        string email
+        string otp
+        datetime created_at
+        bool is_verified
+    }
 ```
 
 ### Key Schema Design Decisions
@@ -187,3 +195,5 @@ erDiagram
    - `info` — Informational only
 
 5. **`ExpenseSplit`** — Pre-calculated amount each user owes for each expense. This makes balance queries fast (just SUM the splits) rather than recalculating split logic every time.
+
+6. **`OTPVerification`** — Simple decoupled table for forgot-password OTP lifecycle tracking. Stores the target email, the generated 6-digit OTP code, verification status (`is_verified`), and the creation timestamp. Storing these verification records separately allows password reset requests to be stateless for the user's main profile until verification completes, and ensures clean token lifecycles with built-in expiration validation.
