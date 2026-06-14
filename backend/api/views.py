@@ -344,6 +344,227 @@ class GroupViewSet(viewsets.ModelViewSet):
             defaults={"joined_at": date.today(), "is_active": True},
         )
 
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.created_by != request.user:
+            return Response(
+                {"detail": "Only the group admin can delete this group."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return super().destroy(request, *args, **kwargs)
+
+    @action(detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated])
+    def request_leave(self, request, pk=None):
+        """Submit a request to leave the group."""
+        group = self.get_object()
+        if group.created_by == request.user:
+            return Response(
+                {"detail": "The group admin cannot leave the group. You must delete the group instead."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+             membership = GroupMembership.objects.get(group=group, user=request.user, is_active=True)
+        except GroupMembership.DoesNotExist:
+             return Response(
+                 {"detail": "You are not an active member of this group."},
+                 status=status.HTTP_400_BAD_REQUEST,
+             )
+        membership.pending_leave_request = True
+        membership.save()
+        return Response({"detail": "Leave request submitted successfully. Waiting for admin approval."})
+
+    @action(detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated])
+    def approve_leave(self, request, pk=None):
+        """Approve a member's request to leave the group (admin only)."""
+        group = self.get_object()
+        if group.created_by != request.user:
+            return Response(
+                {"detail": "Only the group admin can approve leave requests."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        user_id = request.data.get("user_id")
+        if not user_id:
+            return Response(
+                {"detail": "user_id is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            membership = GroupMembership.objects.get(group=group, user_id=user_id, is_active=True)
+        except GroupMembership.DoesNotExist:
+            return Response(
+                {"detail": "Active group membership not found for this user."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        if not membership.pending_leave_request:
+            return Response(
+                {"detail": "This member has not requested to leave the group."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        membership.is_active = False
+        membership.left_at = date.today()
+        membership.pending_leave_request = False
+        membership.save()
+        return Response({"detail": f"Leave request approved. {membership.user.username} has left the group."})
+
+    @action(detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated])
+    def reject_leave(self, request, pk=None):
+        """Reject a member's request to leave the group (admin only)."""
+        group = self.get_object()
+        if group.created_by != request.user:
+            return Response(
+                {"detail": "Only the group admin can reject leave requests."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        user_id = request.data.get("user_id")
+        if not user_id:
+            return Response(
+                {"detail": "user_id is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            membership = GroupMembership.objects.get(group=group, user_id=user_id, is_active=True)
+        except GroupMembership.DoesNotExist:
+            return Response(
+                {"detail": "Active group membership not found for this user."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        if not membership.pending_leave_request:
+            return Response(
+                {"detail": "This member has not requested to leave the group."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        membership.pending_leave_request = False
+        membership.save()
+        return Response({"detail": f"Leave request rejected for {membership.user.username}."})
+
+    @action(detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated])
+    def send_reminders(self, request, pk=None):
+        """Send formal email reminders to everyone who owes money (admin only)."""
+        group = self.get_object()
+        if group.created_by != request.user:
+            return Response(
+                {"detail": "Only the group admin can send reminders."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        
+        from collections import defaultdict
+        from .balance import compute_balances
+        
+        # Compute balances to find debtors and simplified debts
+        summary = compute_balances(group_id=group.id)
+        debts = summary.simplified_debts
+        
+        # Group debts by debtor
+        debtor_debts = defaultdict(list)
+        for debt in debts:
+            debtor_debts[debt.from_user_id].append(debt)
+            
+        if not debtor_debts:
+            return Response({"detail": "No outstanding debts found in this group. Everyone is settled up!"})
+            
+        host = request.get_host()
+        is_backend_local = "localhost" in host or "127.0.0.1" in host
+        
+        sent_count = 0
+        errors = []
+        
+        # Send emails to each debtor
+        for debtor_id, debt_list in debtor_debts.items():
+            try:
+                debtor = User.objects.get(id=debtor_id)
+                if not debtor.email or "@" not in debtor.email:
+                    errors.append(f"User {debtor.username} does not have a valid email address.")
+                    continue
+                    
+                # Construct message
+                subject = f"Outstanding Balance Reminder: {group.name}"
+                
+                # Construct debt details list
+                debts_plain = ""
+                debts_html = ""
+                for d in debt_list:
+                    debts_plain += f"- You owe {d.to_username}: INR {d.amount}\n"
+                    debts_html += f"<li>You owe <strong>{d.to_username}</strong>: <span style='color: #ef4444; font-weight: 600;'>INR {d.amount}</span></li>"
+                    
+                plain_message = (
+                    f"Dear {debtor.username},\n\n"
+                    f"This is a formal reminder regarding your outstanding balances in the group '{group.name}'.\n\n"
+                    f"According to our records, you currently owe:\n"
+                    f"{debts_plain}\n"
+                    f"Please settle these balances directly with the respective group members.\n\n"
+                    f"Best regards,\n"
+                    f"{group.created_by.username} (Group Administrator)\n"
+                    f"FairShare App"
+                )
+                
+                html_message = f"""
+                <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 32px 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);">
+                    <div style="text-align: center; border-bottom: 1px solid #f1f5f9; padding-bottom: 24px; margin-bottom: 28px;">
+                        <h1 style="color: #0f172a; margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.5px;">FairShare</h1>
+                        <p style="color: #ef4444; font-size: 14px; margin: 6px 0 0 0; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">Payment Reminder</p>
+                    </div>
+                    
+                    <p style="color: #334155; font-size: 16px; margin: 0 0 16px 0; font-weight: 500;">Hello {debtor.username},</p>
+                    <p style="color: #475569; font-size: 15px; line-height: 1.6; margin: 0 0 24px 0;">This is a friendly reminder from the administrator of your shared group <strong>{group.name}</strong> regarding your outstanding balances.</p>
+                     
+                    <div style="margin: 28px 0; padding: 24px; background-color: #fffafb; border: 1px solid #fee2e2; border-radius: 8px;">
+                        <h3 style="color: #991b1b; margin-top: 0; margin-bottom: 12px; font-size: 16px; font-weight: 700;">Outstanding Debts:</h3>
+                        <ul style="color: #374151; font-size: 15px; line-height: 1.6; margin: 0; padding-left: 20px;">
+                            {debts_html}
+                        </ul>
+                    </div>
+                     
+                    <p style="color: #475569; font-size: 15px; line-height: 1.6; margin: 0 0 24px 0;">Please settle these balances directly with the respective group members at your earliest convenience.</p>
+                     
+                    <p style="color: #64748b; font-size: 13px; line-height: 1.5; margin: 28px 0 0 0; padding-top: 20px; border-top: 1px solid #f1f5f9;">
+                        Best regards,<br>
+                        <strong>{group.created_by.username}</strong> (Group Administrator)<br>
+                        <em>FairShare Team</em>
+                    </p>
+                </div>
+                """
+                
+                if is_backend_local:
+                    send_mail(
+                        subject=subject,
+                        message=plain_message,
+                        from_email=settings.DEFAULT_FROM_EMAIL,
+                        recipient_list=[debtor.email],
+                        html_message=html_message,
+                        fail_silently=False,
+                    )
+                else:
+                    # Send via Vercel generic SMTP email relay
+                    relay_url = "https://fair-share-spreetail.vercel.app/api/send_email"
+                    headers = {
+                        "Content-Type": "application/json",
+                        "X-Fairshare-Secret": "fairshare-secure-otp-transfer-key-2026"
+                    }
+                    payload = {
+                        "email": debtor.email,
+                        "subject": subject,
+                        "html_message": html_message,
+                        "plain_message": plain_message
+                    }
+                    res = requests.post(relay_url, headers=headers, json=payload, timeout=10)
+                    if res.status_code != 200:
+                        err_text = res.json().get("detail", res.text) if res.status_code == 500 else res.text
+                        raise Exception(f"Vercel SMTP Relay returned status {res.status_code}: {err_text}")
+                         
+                sent_count += 1
+            except Exception as e:
+                import traceback
+                print(traceback.format_exc())
+                errors.append(f"Failed to send email to {debtor.username}: {str(e)}")
+                 
+        if errors:
+            return Response({
+                "detail": f"Sent reminders to {sent_count} members. Failed for {len(errors)} members.",
+                "errors": errors
+            }, status=status.HTTP_207_MULTI_STATUS)
+             
+        return Response({"detail": f"Reminders sent successfully to all {sent_count} debtors!"}, status=status.HTTP_200_OK)
+
     @action(detail=True, methods=["post"])
     def seed(self, request, pk=None):
         """Seed group with flatmates for testing."""

@@ -228,6 +228,81 @@ export default function GroupDetail() {
   const [uploading, setUploading] = useState(false);
   const [importStatus, setImportStatus] = useState('');
   const [timelineIndex, setTimelineIndex] = useState(0);
+  const [reminding, setReminding] = useState(false);
+  const currentUser = JSON.parse(localStorage.getItem('fairshare_user') || '{}');
+
+  const handleDeleteGroup = async () => {
+    if (!window.confirm('Are you absolutely sure you want to delete this group? This will permanently delete all expenses, settlements, and reports.')) return;
+    setSubmitting(true);
+    try {
+      await groupsAPI.delete(id);
+      alert('Group deleted successfully.');
+      window.location.href = '/';
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.detail || 'Failed to delete group.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleRequestLeave = async () => {
+    if (!window.confirm('Do you want to request to leave this group? This requires admin approval.')) return;
+    setSubmitting(true);
+    try {
+      await groupsAPI.requestLeave(id);
+      alert('Leave request submitted successfully. Waiting for admin approval.');
+      loadData();
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.detail || 'Failed to request leave.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleApproveLeave = async (userId, username) => {
+    if (!window.confirm(`Are you sure you want to approve ${username}'s request to leave the group?`)) return;
+    setSubmitting(true);
+    try {
+      await groupsAPI.approveLeave(id, userId);
+      alert(`${username} has left the group.`);
+      loadData();
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.detail || 'Failed to approve leave.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleRejectLeave = async (userId, username) => {
+    if (!window.confirm(`Are you sure you want to reject ${username}'s request to leave the group?`)) return;
+    setSubmitting(true);
+    try {
+      await groupsAPI.rejectLeave(id, userId);
+      alert(`Leave request rejected for ${username}.`);
+      loadData();
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.detail || 'Failed to reject leave.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSendReminders = async () => {
+    setReminding(true);
+    try {
+      const res = await groupsAPI.sendReminders(id);
+      alert(res.data.detail);
+    } catch (err) {
+      console.error(err);
+      alert('Error: ' + (err.response?.data?.detail || 'Failed to send reminders.'));
+    } finally {
+      setReminding(false);
+    }
+  };
 
   // AI Roommate Advisor states
   const [chatMessages, setChatMessages] = useState([
@@ -562,6 +637,70 @@ export default function GroupDetail() {
               </span>
             </div>
             <p style={{ color: 'var(--text-secondary)', marginTop: 4 }}>{group.description || 'No description.'}</p>
+            
+            {(() => {
+              const pendingRequests = group.memberships?.filter(m => m.pending_leave_request && m.is_active) || [];
+              if (currentUser.id === group.created_by && pendingRequests.length > 0) {
+                return (
+                  <div style={{
+                    marginTop: '16px',
+                    marginBottom: '16px',
+                    padding: '12px 16px',
+                    background: 'rgba(245, 158, 11, 0.08)',
+                    border: '1px solid rgba(245, 158, 11, 0.25)',
+                    borderRadius: 'var(--radius-md)',
+                    maxWidth: '600px'
+                  }}>
+                    <h4 style={{ color: '#fbbf24', fontSize: '0.88rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', margin: '0 0 10px 0' }}>
+                      ⏳ Pending Leave Requests
+                    </h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {pendingRequests.map(req => (
+                        <div key={req.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                          <span style={{ fontSize: '0.88rem', color: 'var(--text-primary)' }}>
+                            <strong>{req.username}</strong> requested to leave the group.
+                          </span>
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => handleApproveLeave(req.user_id, req.username)}
+                              disabled={submitting}
+                              style={{
+                                background: 'rgba(16, 185, 129, 0.15)',
+                                border: '1px solid rgba(16, 185, 129, 0.3)',
+                                color: '#34d399',
+                                fontSize: '0.78rem',
+                                fontWeight: 700,
+                                padding: '4px 10px'
+                              }}
+                            >
+                              Approve
+                            </button>
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => handleRejectLeave(req.user_id, req.username)}
+                              disabled={submitting}
+                              style={{
+                                background: 'rgba(239, 68, 68, 0.15)',
+                                border: '1px solid rgba(239, 68, 68, 0.3)',
+                                color: '#f87171',
+                                fontSize: '0.78rem',
+                                fontWeight: 700,
+                                padding: '4px 10px'
+                              }}
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 12 }}>
               {group.memberships?.map(m => (
                 <MemberAvatar key={m.id} name={m.username} size={28} showName={true} />
@@ -576,9 +715,62 @@ export default function GroupDetail() {
             </div>
           </div>
           
-          <div style={{ display: 'flex', gap: 12 }}>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
             <button className="btn btn-ghost" onClick={() => setSettlementModalOpen(true)}>🤝 Settle Up</button>
             <button className="btn btn-primary" onClick={() => setExpenseModalOpen(true)}>💸 Add Expense</button>
+            {currentUser.id === group.created_by ? (
+              <button 
+                className="btn btn-ghost" 
+                onClick={handleDeleteGroup}
+                disabled={submitting}
+                style={{
+                  background: 'rgba(239, 68, 68, 0.12)',
+                  border: '1px solid rgba(239, 68, 68, 0.25)',
+                  color: '#f87171',
+                  cursor: submitting ? 'not-allowed' : 'pointer',
+                  fontWeight: 600
+                }}
+              >
+                🗑️ Delete Group
+              </button>
+            ) : (
+              (() => {
+                const myMem = group.memberships?.find(m => m.user_id === currentUser.id);
+                if (myMem?.pending_leave_request) {
+                  return (
+                    <button 
+                      className="btn btn-ghost" 
+                      disabled={true}
+                      style={{
+                        background: 'rgba(245, 158, 11, 0.08)',
+                        border: '1px solid rgba(245, 158, 11, 0.2)',
+                        color: '#fbbf24',
+                        cursor: 'not-allowed',
+                        fontWeight: 600
+                      }}
+                    >
+                      ⏳ Leave Requested
+                    </button>
+                  );
+                }
+                return (
+                  <button 
+                    className="btn btn-ghost" 
+                    onClick={handleRequestLeave}
+                    disabled={submitting}
+                    style={{
+                      background: 'rgba(239, 68, 68, 0.05)',
+                      border: '1px solid rgba(239, 68, 68, 0.15)',
+                      color: '#f87171',
+                      cursor: submitting ? 'not-allowed' : 'pointer',
+                      fontWeight: 600
+                    }}
+                  >
+                    🚪 Leave Group
+                  </button>
+                );
+              })()
+            )}
           </div>
         </div>
       </GlassCard>
@@ -681,7 +873,30 @@ export default function GroupDetail() {
                   ))}
                 </div>
 
-                <h3 style={{ marginTop: 28, marginBottom: 16 }}>Simplified Settlements</h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 28, marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+                  <h3 style={{ margin: 0 }}>Simplified Settlements</h3>
+                  {currentUser.id === group.created_by && balances?.simplified_debts.length > 0 && (
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={handleSendReminders}
+                      disabled={reminding}
+                      style={{
+                        background: 'rgba(6, 182, 212, 0.1)',
+                        border: '1px solid rgba(6, 182, 212, 0.25)',
+                        color: 'var(--accent-cyan)',
+                        padding: '6px 12px',
+                        fontSize: '0.82rem',
+                        fontWeight: 700,
+                        cursor: reminding ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      ✉️ {reminding ? 'Sending Reminders...' : 'Send Email Reminders'}
+                    </button>
+                  )}
+                </div>
                 {balances?.simplified_debts.length === 0 ? (
                   <GlassCard padding="20px" style={{ textAlign: 'center' }}>
                     <span style={{ color: 'var(--accent-green)', fontWeight: 600 }}>🎉 Group is fully settled up!</span>

@@ -1,5 +1,7 @@
 # 🚀 FairShare — Shared Expenses App
 
+**Live Production App:** [https://fair-share-spreetail-git-master-yashvivobook-1977s-projects.vercel.app/](https://fair-share-spreetail-git-master-yashvivobook-1977s-projects.vercel.app/)
+
 > A next-gen shared expenses platform built for the Spreetail Software Engineering Intern assignment. Handles messy real-world CSV data with intelligent anomaly detection, multi-currency support, and a stunning glassmorphism UI.
 
 ![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white)

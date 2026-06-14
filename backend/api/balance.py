@@ -231,42 +231,63 @@ def compute_timeline(
     Return a list of TimelineSnapshot objects, one per distinct date
     that has activity in the group, showing cumulative balances at each date.
     """
-    expense_qs = Expense.objects.filter(
-        group_id=group_id, is_settlement=False
-    ).order_by("date")
-    settlement_qs = Settlement.objects.filter(group_id=group_id).order_by("date")
-
-    if from_date:
-        expense_qs = expense_qs.filter(date__gte=from_date)
-        settlement_qs = settlement_qs.filter(date__gte=from_date)
-    if to_date:
-        expense_qs = expense_qs.filter(date__lte=to_date)
-        settlement_qs = settlement_qs.filter(date__lte=to_date)
-
-    # Collect all unique dates
-    dates: set[date] = set()
-    for e in expense_qs:
-        dates.add(e.date)
-    for s in settlement_qs:
-        dates.add(s.date)
-
-    if not dates:
-        return []
-
-    sorted_dates = sorted(dates)
-    snapshots: list[TimelineSnapshot] = []
-
-    # For each date, compute cumulative balances up to (and including) that date
+    # Fetch active memberships
     memberships = GroupMembership.objects.filter(group_id=group_id).select_related("user")
     users: dict[int, User] = {m.user_id: m.user for m in memberships}
 
+    # Fetch expenses (non-settlement) up to to_date (if given)
+    expense_qs = Expense.objects.filter(group_id=group_id, is_settlement=False).prefetch_related("splits")
+    if to_date:
+        expense_qs = expense_qs.filter(date__lte=to_date)
+    expense_qs = expense_qs.order_by("date", "created_at")
+
+    # Fetch settlements up to to_date (if given)
+    settlement_qs = Settlement.objects.filter(group_id=group_id)
+    if to_date:
+        settlement_qs = settlement_qs.filter(date__lte=to_date)
+    settlement_qs = settlement_qs.order_by("date", "created_at")
+
+    # Group activities by date
+    activity_by_date = defaultdict(list)
+    for e in expense_qs:
+        activity_by_date[e.date].append(e)
+    for s in settlement_qs:
+        activity_by_date[s.date].append(s)
+
+    if not activity_by_date:
+        return []
+
+    sorted_dates = sorted(activity_by_date.keys())
+    snapshots: list[TimelineSnapshot] = []
+
+    # Running totals
+    total_paid = defaultdict(Decimal)
+    total_owed = defaultdict(Decimal)
+
     for d in sorted_dates:
-        summary = compute_balances(group_id, as_of_date=d)
-        snapshot = TimelineSnapshot(
-            date=d,
-            member_balances={mb.user_id: mb.net_balance for mb in summary.member_balances},
-        )
-        snapshots.append(snapshot)
+        activities = activity_by_date[d]
+        for act in activities:
+            if isinstance(act, Expense):
+                total_paid[act.paid_by_id] += act.amount
+                for split in act.splits.all():
+                    total_owed[split.user_id] += split.amount_owed
+            elif isinstance(act, Settlement):
+                total_paid[act.paid_by_id] += act.amount
+                total_owed[act.paid_to_id] -= act.amount
+
+        # Only add snapshot if it falls within [from_date, to_date]
+        if from_date is None or d >= from_date:
+            member_nets = {}
+            for uid in users:
+                paid = total_paid.get(uid, Decimal("0"))
+                owed = total_owed.get(uid, Decimal("0"))
+                net_val = (paid - owed).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                member_nets[uid] = net_val
+
+            snapshots.append(TimelineSnapshot(
+                date=d,
+                member_balances=member_nets,
+            ))
 
     return snapshots
 

@@ -53,6 +53,7 @@ class GroupMembership(models.Model):
     joined_at = models.DateField()
     left_at = models.DateField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
+    pending_leave_request = models.BooleanField(default=False)
 
     class Meta:
         unique_together = ("user", "group", "joined_at")

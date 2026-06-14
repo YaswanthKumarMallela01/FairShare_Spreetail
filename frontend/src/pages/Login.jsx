@@ -19,6 +19,8 @@ export default function Login() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showResetPassword, setShowResetPassword] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -366,16 +368,37 @@ export default function Login() {
                     Forgot Password?
                   </button>
                 </div>
-                <input
-                  id="password"
-                  type="password"
-                  className="input-field"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  disabled={loading || demoLoading}
-                  style={{ marginTop: '8px' }}
-                />
+                <div style={{ position: 'relative', marginTop: '8px' }}>
+                  <input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    className="input-field"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    disabled={loading || demoLoading}
+                    style={{ width: '100%', paddingRight: '48px' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    style={{
+                      position: 'absolute',
+                      right: '12px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: 'var(--text-secondary)',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      padding: 0
+                    }}
+                  >
+                    {showPassword ? 'Hide' : 'Show'}
+                  </button>
+                </div>
               </div>
 
               <button
@@ -503,28 +526,72 @@ export default function Login() {
             <form onSubmit={handleResetPasswordSubmit}>
               <div className="form-group">
                 <label className="form-label" htmlFor="newPassword">New Password</label>
-                <input
-                  id="newPassword"
-                  type="password"
-                  className="input-field"
-                  placeholder="Enter new password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  disabled={loading}
-                />
+                <div style={{ position: 'relative' }}>
+                  <input
+                    id="newPassword"
+                    type={showResetPassword ? 'text' : 'password'}
+                    className="input-field"
+                    placeholder="Enter new password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    disabled={loading}
+                    style={{ width: '100%', paddingRight: '48px' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowResetPassword(!showResetPassword)}
+                    style={{
+                      position: 'absolute',
+                      right: '12px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: 'var(--text-secondary)',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      padding: 0
+                    }}
+                  >
+                    {showResetPassword ? 'Hide' : 'Show'}
+                  </button>
+                </div>
               </div>
 
               <div className="form-group" style={{ marginBottom: '24px' }}>
                 <label className="form-label" htmlFor="confirmPassword">Confirm Password</label>
-                <input
-                  id="confirmPassword"
-                  type="password"
-                  className="input-field"
-                  placeholder="Confirm new password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  disabled={loading}
-                />
+                <div style={{ position: 'relative' }}>
+                  <input
+                    id="confirmPassword"
+                    type={showResetPassword ? 'text' : 'password'}
+                    className="input-field"
+                    placeholder="Confirm new password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    disabled={loading}
+                    style={{ width: '100%', paddingRight: '48px' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowResetPassword(!showResetPassword)}
+                    style={{
+                      position: 'absolute',
+                      right: '12px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: 'var(--text-secondary)',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      padding: 0
+                    }}
+                  >
+                    {showResetPassword ? 'Hide' : 'Show'}
+                  </button>
+                </div>
               </div>
 
               <button

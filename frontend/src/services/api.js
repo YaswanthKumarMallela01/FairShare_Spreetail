@@ -60,6 +60,10 @@ export const groupsAPI = {
   seed: (id) => api.post(`groups/${id}/seed/`),
   join: (code) => api.post('groups/join/', { invite_code: code }),
   getAIAssistance: (id, data) => api.post(`groups/${id}/ai-advise/`, data),
+  requestLeave: (id) => api.post(`groups/${id}/request_leave/`),
+  approveLeave: (id, userId) => api.post(`groups/${id}/approve_leave/`, { user_id: userId }),
+  rejectLeave: (id, userId) => api.post(`groups/${id}/reject_leave/`, { user_id: userId }),
+  sendReminders: (id) => api.post(`groups/${id}/send_reminders/`),
 };
 
 // ============ EXPENSES ============

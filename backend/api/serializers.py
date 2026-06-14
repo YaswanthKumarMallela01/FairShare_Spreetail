@@ -66,6 +66,7 @@ class GroupMembershipSerializer(serializers.ModelSerializer):
             "joined_at",
             "left_at",
             "is_active",
+            "pending_leave_request",
         ]
         read_only_fields = ["id"]
 
