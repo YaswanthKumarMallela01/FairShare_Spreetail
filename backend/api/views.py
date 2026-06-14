@@ -123,31 +123,119 @@ class ForgotPasswordView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def post(self, request: Request) -> Response:
-        import socket
-        
-        # Monkeypatch getaddrinfo to force IPv4
-        orig_getaddrinfo = socket.getaddrinfo
-        def getaddrinfo_ipv4(host, port, family=0, type=0, proto=0, flags=0):
-            return orig_getaddrinfo(host, port, socket.AF_INET, type, proto, flags)
-        socket.getaddrinfo = getaddrinfo_ipv4
-        
-        test_log = []
-        for port in [465, 587, 25]:
-            try:
-                test_log.append(f"Testing port {port} (IPv4)...")
-                # Try socket connection with 3.0s timeout
-                s = socket.create_connection(("smtp.gmail.com", port), timeout=3.0)
-                s.close()
-                test_log.append(f"Port {port} CONNECT SUCCESS!")
-            except Exception as e:
-                test_log.append(f"Port {port} CONNECT FAILED: {str(e)}")
-                
-        # Restore getaddrinfo
-        socket.getaddrinfo = orig_getaddrinfo
-        
-        return Response({
-            "test_log": test_log
-        })
+        try:
+            email = request.data.get("email", "").strip()
+            if not email:
+                return Response(
+                    {"detail": "Email address is required."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Look up user(s) matching this email
+            users = User.objects.filter(email__iexact=email)
+            if not users.exists():
+                return Response(
+                    {"detail": "No account found with this email address."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            # Generate a random 6-digit OTP
+            otp = f"{random.randint(100000, 999999)}"
+
+            # Save to database (delete existing OTP requests for this email first)
+            OTPVerification.objects.filter(email__iexact=email).delete()
+            OTPVerification.objects.create(email=email.lower(), otp=otp)
+
+            # Check if we should use Vercel Serverless SMTP relay
+            origin = request.headers.get("Origin") or request.META.get("HTTP_ORIGIN")
+            if not origin:
+                referer = request.headers.get("Referer") or request.META.get("HTTP_REFERER")
+                if referer:
+                    from urllib.parse import urlparse
+                    parsed = urlparse(referer)
+                    origin = f"{parsed.scheme}://{parsed.netloc}"
+            
+            is_local = not origin or "localhost" in origin or "127.0.0.1" in origin
+            
+            if is_local:
+                # Use standard Django send_mail locally
+                subject = "Reset Your FairShare Password"
+                html_message = f"""
+                <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 32px 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);">
+                    <div style="text-align: center; border-bottom: 1px solid #f1f5f9; padding-bottom: 24px; margin-bottom: 28px;">
+                        <h1 style="color: #0f172a; margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.5px;">FairShare</h1>
+                        <p style="color: #64748b; font-size: 14px; margin: 6px 0 0 0; font-weight: 500;">Shared expense tracking made simple</p>
+                    </div>
+                    
+                    <p style="color: #334155; font-size: 16px; margin: 0 0 16px 0; font-weight: 500;">Hello,</p>
+                    <p style="color: #475569; font-size: 15px; line-height: 1.6; margin: 0 0 24px 0;">We received a request to reset the password for your FairShare account. Please use the following One-Time Password (OTP) to complete the verification process:</p>
+                    
+                    <div style="text-align: center; margin: 32px 0; padding: 20px; background-color: #f8fafc; border-radius: 8px; border: 1px dashed #cbd5e1;">
+                        <span style="font-size: 36px; font-weight: 800; letter-spacing: 6px; color: #2563eb; font-family: 'Courier New', Courier, monospace;">{otp}</span>
+                    </div>
+                    
+                    <p style="color: #dc2626; font-size: 13px; font-weight: 600; margin: 0 0 24px 0;">⚠️ This OTP code is valid for 10 minutes. Do not share this email or code with anyone.</p>
+                    
+                    <p style="color: #64748b; font-size: 13px; line-height: 1.5; margin: 28px 0 0 0; padding-top: 20px; border-top: 1px solid #f1f5f9;">
+                        If you did not request a password reset, you can safely ignore this email. Your password will remain unchanged.
+                    </p>
+                    
+                    <p style="color: #94a3b8; font-size: 11px; text-align: center; margin-top: 36px; margin-bottom: 0;">
+                        &copy; 2026 FairShare. All rights reserved.
+                    </p>
+                </div>
+                """
+                plain_message = (
+                    f"Hello,\n\n"
+                    f"We received a request to reset your FairShare password. "
+                    f"Your One-Time Password (OTP) code is:\n\n"
+                    f"{otp}\n\n"
+                    f"This code is valid for 10 minutes. Do not share this code with anyone.\n\n"
+                    f"If you did not request a password reset, you can safely ignore this email.\n\n"
+                    f"Best regards,\n"
+                    f"FairShare Team"
+                )
+                send_mail(
+                    subject=subject,
+                    message=plain_message,
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    recipient_list=[email],
+                    html_message=html_message,
+                    fail_silently=False,
+                )
+            else:
+                # Call Vercel Serverless email relay
+                relay_url = f"{origin.rstrip('/')}/api/send_otp"
+                headers = {
+                    "Content-Type": "application/json",
+                    "X-Fairshare-Secret": "fairshare-secure-otp-transfer-key-2026"
+                }
+                payload = {
+                    "email": email,
+                    "otp": otp
+                }
+                res = requests.post(relay_url, headers=headers, json=payload, timeout=10)
+                if res.status_code != 200:
+                    try:
+                        err_detail = res.json().get("detail", res.text)
+                    except Exception:
+                        err_detail = res.text
+                    raise Exception(f"Vercel SMTP Relay returned status {res.status_code}: {err_detail}")
+
+            return Response(
+                {"detail": "OTP sent successfully. Please check your inbox."},
+                status=status.HTTP_200_OK,
+            )
+        except Exception as e:
+            import traceback
+            return Response(
+                {
+                    "detail": "Failed to send email.",
+                    "error": str(e),
+                    "traceback": traceback.format_exc()
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
 
 class VerifyOTPView(APIView):
